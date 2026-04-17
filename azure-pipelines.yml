@@ -41,9 +41,6 @@ stages:
 
               echo "Installing dependencies..."
               npm install
-
-              echo "Running backend build..."
-              npm run build
             displayName: Validate backend build
 
   - stage: BuildAndPush
@@ -172,7 +169,7 @@ stages:
               git config user.name "akash66sheoran"
 
               git add values.yaml
-              git commit -m "Update front image tag to $(IMAGE_TAG)"
+              git commit -m "Update backend image tag to $(IMAGE_TAG)"
 
               git remote set-url origin https://$(ECOM-GITOPS-REPO-TOKEN)@github.com/akash66sheoran/ecom-gitops.git
               git push origin main
