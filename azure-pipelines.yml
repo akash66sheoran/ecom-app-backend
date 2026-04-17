@@ -1,0 +1,180 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  awsRegion: 'ap-south-1'
+  ecrRepository: 'ecom-app/backend'
+  ecrRegistry: '259974370560.dkr.ecr.ap-south-1.amazonaws.com'
+
+stages:
+  - stage: Validate
+    displayName: Validate backend Source
+    jobs:
+      - job: ValidateRepo
+        displayName: Validate repo structure and backend build
+        steps:
+          - checkout: self
+            fetchDepth: '1'
+
+          - bash: |
+              set -euo pipefail
+
+              echo "Checking required files..."
+              test -f Dockerfile
+              test -f package.json
+
+              echo "Required files found."
+            displayName: Validate required files
+
+          - bash: |
+              set -euo pipefail
+
+              echo "Installing dependencies..."
+              npm install
+
+              echo "Running backend build..."
+              npm run build
+            displayName: Validate backend build
+
+  - stage: BuildAndPush
+    displayName: Build Docker Image and Push to ECR
+    dependsOn: Validate
+    condition: succeeded()
+    jobs:
+      - job: backendImage
+        displayName: Build image and push on main merges
+        steps:
+          - checkout: self
+            fetchDepth: '1'
+
+          - bash: |
+              set -euo pipefail
+
+              SHORT_SHA="$(echo "$(Build.SourceVersion)" | cut -c1-7)"
+              IMAGE_TAG="$(Build.BuildId)"
+              COMMIT_TAG="sha-${SHORT_SHA}"
+              IMAGE_URI="$(ecrRegistry)/$(ecrRepository)"
+
+              echo "##vso[task.setvariable variable=IMAGE_TAG;isOutput=true]$IMAGE_TAG"
+              echo "##vso[task.setvariable variable=COMMIT_TAG;isOutput=true]$COMMIT_TAG"
+              echo "##vso[task.setvariable variable=IMAGE_URI;isOutput=true]$IMAGE_URI"
+
+              echo "Build reason: $(Build.Reason)"
+              echo "Image URI: $IMAGE_URI"
+              echo "Build tag: $IMAGE_TAG"
+              echo "Commit tag: $COMMIT_TAG"
+            name: setImageVars
+            displayName: Prepare image variables
+
+          - bash: |
+              set -euo pipefail
+
+              docker --version
+
+              docker build \
+                -f Dockerfile \
+                --label org.opencontainers.image.revision="$(Build.SourceVersion)" \
+                --label org.opencontainers.image.source="$(Build.Repository.Uri)" \
+                --label org.opencontainers.image.created="$(Build.BuildNumber)" \
+                -t "$(ecrRegistry)/$(ecrRepository):$(Build.BuildId)" \
+                -t "$(ecrRegistry)/$(ecrRepository):sha-$(echo "$(Build.SourceVersion)" | cut -c1-7)" \
+                -t "$(ecrRegistry)/$(ecrRepository):latest" \
+                .
+            displayName: Build Docker image
+
+          - bash: |
+              set -euo pipefail
+
+              cat > image-metadata.json <<EOF
+              {
+                "image": "$(ecrRegistry)/$(ecrRepository)",
+                "buildTag": "$(Build.BuildId)",
+                "commitTag": "sha-$(echo "$(Build.SourceVersion)" | cut -c1-7)",
+                "latestTag": "latest",
+                "commit": "$(Build.SourceVersion)",
+                "branch": "$(Build.SourceBranch)",
+                "buildId": "$(Build.BuildId)",
+                "buildReason": "$(Build.Reason)"
+              }
+              EOF
+
+              cat image-metadata.json
+            displayName: Create image metadata
+
+          - publish: image-metadata.json
+            artifact: backend-image-metadata
+            displayName: Publish image metadata
+
+          - bash: |
+              set -euo pipefail
+
+              SHORT_SHA="$(echo "$(Build.SourceVersion)" | cut -c1-7)"
+              IMAGE_TAG="$(Build.BuildId)"
+              COMMIT_TAG="sha-${SHORT_SHA}"
+              IMAGE_URI="$(ecrRegistry)/$(ecrRepository)"
+
+              aws --version
+              docker --version
+
+              aws ecr get-login-password --region "$(awsRegion)" | \
+              docker login \
+                --username AWS \
+                --password-stdin "$(ecrRegistry)"
+
+              docker push "$IMAGE_URI:$IMAGE_TAG"
+              docker push "$IMAGE_URI:$COMMIT_TAG"
+              docker push "$IMAGE_URI:latest"
+
+              echo "Pushed image tags:"
+              echo "  $IMAGE_URI:$IMAGE_TAG"
+              echo "  $IMAGE_URI:$COMMIT_TAG"
+              echo "  $IMAGE_URI:latest"
+            displayName: Push image to Amazon ECR
+            condition: ne(variables['Build.Reason'], 'PullRequest')
+            env:
+              AWS_ACCESS_KEY_ID: $(AWS_ACCESS_KEY_ID)
+              AWS_SECRET_ACCESS_KEY: $(AWS_SECRET_ACCESS_KEY)
+              AWS_DEFAULT_REGION: $(awsRegion)
+
+  - stage: UpdateGitOps
+    displayName: Update Helm values in GitOps repo
+    dependsOn: BuildAndPush
+    condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+    variables:
+      IMAGE_TAG: $[ stageDependencies.BuildAndPush.backendImage.outputs['setImageVars.IMAGE_TAG'] ]
+    jobs:
+      - job: UpdatebackendHelmValues
+        displayName: Update backend tag in GitOps repo
+        steps:
+
+          - bash: |
+              set -euo pipefail
+
+              git clone --branch main --single-branch --depth 1 https://github.com/akash66sheoran/ecom-gitops.git
+              cd ecom-gitops
+              git checkout main
+
+              cd helm
+
+              sed -i '/backend:/,/tag:/ s/tag:.*/tag: "'$(IMAGE_TAG)'"/' values.yaml
+
+              git config user.email "akash66sheoran@gmail.com"
+              git config user.name "akash66sheoran"
+
+              git add values.yaml
+              git commit -m "Update front image tag to $(IMAGE_TAG)"
+
+              git remote set-url origin https://$(ECOM-GITOPS-REPO-TOKEN)@github.com/akash66sheoran/ecom-gitops.git
+              git push origin main
+
+            displayName: Update Helm values
