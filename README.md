@@ -1,34 +1,62 @@
-# 🚀 Backend Service — Cloud-Native E-Commerce App
+# 🚀 Backend Service — Cloud-Native E-Commerce API
+
+> A production-ready Node.js backend deployed on **AWS EKS** using **Docker, Kubernetes, and GitOps (ArgoCD)**.
 
 ---
 
-## 🧠 Project Overview
+## 🌐 Overview
 
-This repository contains the **backend** of my production-style MERN e-commerce application.
+This repository contains the **backend API service** of a cloud-native e-commerce platform.
 
-It is containerized with Docker, built and published through **Azure DevOps Pipelines**, stored in **AWS Elastic Container Registry (ECR)**, and deployed to **Amazon EKS** using a **GitOps workflow with ArgoCD and Helm**.
-
-- Application source code is stored in GitHub  
-- CI is handled by **Azure DevOps Pipelines**  
-- Docker images are pushed to **AWS Elastic Container Registry (ECR)**  
-- Deployment configuration is stored in a separate **GitOps repository**  
-- **ArgoCD** watches the GitOps repo and deploys changes to **Amazon EKS**
+It is built using **Node.js + Express + MongoDB** and designed to run in a **containerized Kubernetes environment**, following modern DevOps and cloud-native practices.
 
 ---
 
-## 🏗️ Architecture Flow
+## 🎯 Responsibilities
+
+The backend service is responsible for:
+
+- Managing product/items data
+- Handling API requests from frontend
+- Connecting to MongoDB database
+- Exposing health endpoints for Kubernetes
+- Ensuring reliability with retry logic
+
+---
+
+## ⚙️ Tech Stack
+
+| Layer | Technology |
+|------|-----------|
+| Runtime | Node.js |
+| Framework | Express.js |
+| Database | MongoDB |
+| ODM | Mongoose |
+| Containerization | Docker |
+| CI/CD | Azure DevOps Pipelines |
+| Registry | AWS ECR |
+| Orchestration | Amazon EKS |
+| Deployment | ArgoCD (GitOps) |
+
+---
+
+## 🧩 Architecture Diagram
+
+<img src="./img/architecture.png" width="100%" />
+
+> Backend service running on Amazon EKS, connected to MongoDB, exposed via Kubernetes Service and AWS ALB Ingress.
+
+---
+
+## 🏗️ Architecture Overview
 
 ```text
-Backend Code (GitHub)
+Frontend (React)
         ↓
-Azure DevOps Pipeline
+AWS ALB Ingress
         ↓
-Validate → Build Docker Image
+Kubernetes Service
         ↓
-Push Image to AWS ECR
+Backend Pod (Node.js)
         ↓
-Update Helm Values in GitOps Repository
-        ↓
-ArgoCD Detects Change
-        ↓
-Deploy to Amazon EKS 🚀
+MongoDB (StatefulSet)

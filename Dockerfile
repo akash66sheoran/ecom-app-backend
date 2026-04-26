@@ -1,12 +1,19 @@
-FROM node:16-alpine
+FROM node:24.15.0-alpine3.22
 
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm install --only=production
+
+RUN npm ci --omit=dev
 
 COPY . .
 
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+RUN chown -R appuser:appgroup /app
+
+USER appuser
+
 EXPOSE 3000
 
-CMD ["npm", "start"]
+CMD ["node", "server.js"]

@@ -2,11 +2,31 @@ trigger:
   branches:
     include:
       - main
+  paths:
+    include:
+      - server.js
+      - package.json
+      - package-lock.json
+      - Dockerfile
+    exclude:
+      - README.md
+      - img/**
+      - azure-pipelines.yaml
 
 pr:
   branches:
     include:
       - main
+  paths:
+    include:
+      - server.js
+      - package.json
+      - package-lock.json
+      - Dockerfile
+      - azure-pipelines.yaml
+    exclude:
+      - README.md
+      - img/**
 
 pool:
   vmImage: ubuntu-latest
